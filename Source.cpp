@@ -4,9 +4,12 @@
 #include"SFML/Network.hpp"
 #include"SFML/Window.hpp"
 #include<iostream>
+#include<vector>
+#include<cstdlib>
 using namespace sf;
 int main()
 {
+	srand(time(NULL));
 	//Window setup
 	RenderWindow window(VideoMode(1920, 1080), "Starfighter", Style::Default);
 	int keytime=0;
@@ -15,22 +18,33 @@ int main()
 	//Player
 	RectangleShape player(Vector2f(99.f,75.f));
 	player.setOrigin(player.getSize().x/2,player.getSize().y/2);
-	player.setPosition(window.getSize().x/2,window.getSize().y-100);
+	player.setPosition(window.getSize().x/2.f,window.getSize().y-100.f);
 	Texture p1;
 	p1.loadFromFile("tex/playerShip3_red.png");
 	player.setTexture(&p1);
 
 	//bullet
-	bool isFire = false;
-	RectangleShape bullet(Vector2f(13.f,37.f));
-	Texture b1;
-	b1.loadFromFile("tex/laserGreen04.png");
-	bullet.setTexture(&b1);
+	RectangleShape projectile(Vector2f(13,37));
+	projectile.setFillColor(Color::Green);
+	std::vector<RectangleShape>projectiles;
+	projectiles.push_back(RectangleShape(projectile));
+	int shootTimer = 0;
+	int bulletcooldown = 15;
 
 	//Enemy beta
-	CircleShape test(50.f);
-	test.setPosition(0,20);
-	int dir = 0;
+	RectangleShape enemy(Vector2f(104,84));
+	Texture e1;
+	e1.loadFromFile("tex/enemyBlack2.png");
+	enemy.setTexture(&e1);
+	enemy.setPosition(((rand() % window.getSize().x) - enemy.getSize().x) < 0 ? 0 : (rand() % window.getSize().x) - enemy.getSize().x, rand() % 360);
+	std::vector<RectangleShape>enemies;
+	enemies.push_back(RectangleShape(enemy));
+	int spawnTimer = 0;
+	int n = 60;
+	int count=0;
+	int aliveEnemies = 7;
+	
+
 	//Game loop
 	while (window.isOpen())
 	{
@@ -44,61 +58,108 @@ int main()
 		}
 		
 		//Enemy update
-		if (dir == 0)
-			if (test.getPosition().x < (1920 - 100))
-				test.move(5.f, 0);
-			else
-				dir = 1;
-		if (dir == 1)
-			if (test.getPosition().x > 0)
-				test.move(-5.f, 0);
-			else
-				dir = 0;
+		if (spawnTimer < n)
+			spawnTimer++;
+		if (spawnTimer >= n && count < aliveEnemies)
+		{
+			enemy.setPosition(((rand()%window.getSize().x)-enemy.getSize().x)<0 ? 0: (rand() % window.getSize().x) - enemy.getSize().x,rand()%360);
+			enemies.push_back(RectangleShape(enemy));
+			for (int i = 0; i < enemies.size(); i++)
+			{
+				if (enemies[i].getPosition().x < 0)
+				{
+					enemies.erase(enemies.begin() + i);
+					count--;
+				}
+			}
+			spawnTimer = 0;
+			count++;
+		}
+	
+
 
 		//Ship update
 
 		if (Keyboard::isKeyPressed(Keyboard::W) && player.getPosition().y > 80)
 		{
-			player.move(0.f, -8.f);
+			player.move(0.f, -10.f);
 			keytime = 0;
 		}
 		if (Keyboard::isKeyPressed(Keyboard::S) && player.getPosition().y < (1080 - 80))
 		{
-			player.move(0.f, 8.f);
+			player.move(0.f, 10.f);
 			keytime = 0;
 		}
 		if (Keyboard::isKeyPressed(Keyboard::A) && player.getPosition().x > 49.5)
 		{
-			player.move(-8.f, 0.f);
+			player.move(-10.f, 0.f);
 			keytime = 0;
 		}
 		if (Keyboard::isKeyPressed(Keyboard::D) && player.getPosition().x < (1920 - 49.5))
 		{
-			player.move(8.f, 0.f);
+			player.move(10.f, 0.f);
 			keytime = 0;
 		}
-
-		//Bullet update
+		Vector2f playercenter(player.getPosition().x - 7, player.getPosition().y - player.getSize().y);
 		
-		if (Keyboard::isKeyPressed(Keyboard::Space) && isFire==0)
+		
+		//Projectiles update
+		if (shootTimer<bulletcooldown)
+			shootTimer++;
+		if (Keyboard::isKeyPressed(Keyboard::Space) && shootTimer>=bulletcooldown)
 		{
-			isFire = true;
-			bullet.setPosition(player.getPosition().x-8, player.getPosition().y -75);
+			projectile.setPosition(playercenter);
+			projectiles.push_back(RectangleShape(projectile));
+			shootTimer = 0;
 		}
-		if (isFire==1)
+		for (size_t i = 0; i < projectiles.size(); i++)
 		{
-			bullet.move(0.f, -10.f);
-		}
-		if (bullet.getPosition().y < -37 || bullet.getGlobalBounds().intersects(test.getGlobalBounds()))
-		{
-			isFire = 0;
+			projectiles[i].move(0, -20);
+			if (projectiles[i].getPosition().y < 0)
+				projectiles.erase(projectiles.begin() + i);
 		}
 
+		//Collision
+		for (int i = 0; i < enemies.size(); i++)
+		{
+			for (int k = 0; k < projectiles.size(); k++)
+			{
+				if (enemies[i].getGlobalBounds().intersects(projectiles[k].getGlobalBounds()))
+				{
+					projectiles.erase(projectiles.begin() + k);
+					enemies.erase(enemies.begin() + i);
+					count --;
+					break;
+				}
+			}
+		}
+		for (size_t i = 0; i < enemies.size(); i++)
+		{
+			if (enemies[i].getGlobalBounds().intersects(player.getGlobalBounds()))
+			{
+				enemies.erase(enemies.begin() + i);
+				player.setPosition(window.getSize().x / 2.f, window.getSize().y - 100.f);
+				count--;
+				break;
+			}
+		}
+
+		
+		//Draw
 		window.clear();
-		window.draw(test);
+			//player
 		window.draw(player);
-		if(isFire)
-		window.draw(bullet);
+
+			//enemies
+		for (size_t i = 0; i < enemies.size(); i++)
+		{
+				window.draw(enemies[i]);
+		}
+			//projectile(bullets)
+		for (size_t i = 0; i < projectiles.size(); i++)
+		{
+			window.draw(projectiles[i]);
+		}
 		window.display();
 	}
 	return 0;
